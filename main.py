@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 import os
 from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -6,6 +7,11 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from typing import Dict, Tuple
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
+
+CHAT_HISTORY_PATH = "chat_history"
+
+# Ensure the chat history directory exists
+os.makedirs(CHAT_HISTORY_PATH, exist_ok=True)
 
 # Initialize the language model
 llm = OllamaLLM(
@@ -25,15 +31,13 @@ prompt = ChatPromptTemplate.from_messages([
 # Initialize memory storage
 memory_storage: Dict[Tuple[str, str], ChatMessageHistory] = {}
 
-
 def save_chat_history(user_id: str, conversation_id: str, history: ChatMessageHistory):
-    filename = f"chat_history_{user_id}_{conversation_id}.json"
+    filename = os.path.join(CHAT_HISTORY_PATH, f"chat_history_{user_id}_{conversation_id}.json")
     with open(filename, 'w') as f:
-        json.dump([{"type": msg.type, "content": msg.content} for msg in history.messages], f)
-
+        json.dump([{"type": msg.type, "content": msg.content, "metadata": str(datetime.now())} for msg in history.messages], f)
 
 def load_chat_history(user_id: str, conversation_id: str) -> ChatMessageHistory:
-    filename = f"chat_history_{user_id}_{conversation_id}.json"
+    filename = os.path.join(CHAT_HISTORY_PATH, f"chat_history_{user_id}_{conversation_id}.json")
     history = ChatMessageHistory()
     if os.path.exists(filename):
         with open(filename, 'r') as f:
@@ -45,14 +49,12 @@ def load_chat_history(user_id: str, conversation_id: str) -> ChatMessageHistory:
                     history.add_ai_message(msg["content"])
     return history
 
-
 # Function to get or create chat history for a session
 def get_session_history(user_id: str, conversation_id: str) -> ChatMessageHistory:
     key = (user_id, conversation_id)
     if key not in memory_storage:
         memory_storage[key] = load_chat_history(user_id, conversation_id)
     return memory_storage[key]
-
 
 chain = prompt | llm
 
@@ -82,7 +84,6 @@ conversation = RunnableWithMessageHistory(
     ],
 )
 
-
 def get_response(input_text: str, current_user_id: str, current_conversation_id: str):
     print("Assistant: ")
 
@@ -101,7 +102,6 @@ def get_response(input_text: str, current_user_id: str, current_conversation_id:
                       get_session_history(current_user_id, current_conversation_id))
 
     return full_response
-
 
 # Example usage
 GLOBAL_USER_ID = "Jake"
